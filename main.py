@@ -25,6 +25,20 @@ AUTH_COOKIES = [
     "SPC_SEC_SI"
 ]
 
+def parse_prazo(prazo_text):
+    """
+    Extrai a data do texto do pedido.
+    Se não encontrar, assume hoje no horário local.
+    Não faz conversão de fuso horário para evitar deslocamento.
+    """
+    match = re.search(r"\d{2}/\d{2}/\d{4}", prazo_text)
+    if match:
+        prazo = match.group(0)  # já está no formato correto
+    else:
+        prazo = datetime.now().strftime("%d/%m/%Y")  # hoje
+    return prazo
+
+
 def gerar_listas(orders):
     # Agrupa pedidos por prazo
     separacao = defaultdict(lambda: defaultdict(int))
@@ -234,11 +248,7 @@ def extract_orders(page):
             prazo_text = status_desc.inner_text().strip() if status_desc else ""
             
             # Regex para encontrar data no formato dd/mm/yyyy
-            match = re.search(r"\d{2}/\d{2}/\d{4}", prazo_text)
-            if match:
-                prazo = match.group(0)
-            else:
-                prazo = datetime.now().strftime("%d/%m/%Y")  # Presume hoje
+            prazo = parse_prazo(prazo_text)
 
             order = {
                 "item": f"{nome} {desc}".strip(),
