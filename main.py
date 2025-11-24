@@ -4,6 +4,8 @@ from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 import os
 from collections import defaultdict
+import re
+from datetime import datetime
 
 load_dotenv()
 
@@ -24,19 +26,22 @@ AUTH_COOKIES = [
 ]
 
 def gerar_listas(orders):
-    separacao = defaultdict(int)
+    # Agrupa pedidos por prazo
+    separacao = defaultdict(lambda: defaultdict(int))
 
-    # Agrupa quantidades por item
     for order in orders:
-        nome = order["item"]
-        qtd = order["quantidade"] or 0
-        separacao[nome] += qtd
+        prazo = order.get("prazo", "Hoje")
+        item = order["item"]
+        quantidade = order.get("quantidade", 0) or 0
 
-    # Converte para lista normal
-    lista_separacao = [
-        {"item": item, "total": total}
-        for item, total in separacao.items()
-    ]
+        separacao[prazo][item] += quantidade
+
+    # Converte para lista de dicts dentro de cada prazo
+    lista_separacao = {}
+    for prazo, items in separacao.items():
+        lista_separacao[prazo] = [
+            {"item": nome, "quantidade": total} for nome, total in items.items()
+        ]
 
     # Lista de pedidos é a original
     lista_pedidos = orders
@@ -215,20 +220,30 @@ def extract_orders(page):
             item_name = card.query_selector(".item-name")
             item_desc = card.query_selector(".item-description")
             item_amount = card.query_selector(".item-amount")
+            status_desc = card.query_selector(".status-description")
 
-            # --- NOVO: converter quantidade para número ---
+            # Quantidade
             quantidade_raw = item_amount.inner_text().strip() if item_amount else None
-            if quantidade_raw:
-                quantidade = int(quantidade_raw.replace("x", "").strip())
-            else:
-                quantidade = None
+            quantidade = int(quantidade_raw.replace("x", "").strip()) if quantidade_raw else None
 
+            # Nome + descrição
             nome = item_name.inner_text().strip() if item_name else ""
             desc = item_desc.inner_text().strip() if item_desc else ""
+
+            # Prazo
+            prazo_text = status_desc.inner_text().strip() if status_desc else ""
+            
+            # Regex para encontrar data no formato dd/mm/yyyy
+            match = re.search(r"\d{2}/\d{2}/\d{4}", prazo_text)
+            if match:
+                prazo = match.group(0)
+            else:
+                prazo = datetime.now().strftime("%d/%m/%Y")  # Presume hoje
 
             order = {
                 "item": f"{nome} {desc}".strip(),
                 "quantidade": quantidade,
+                "prazo": prazo
             }
 
             orders.append(order)
